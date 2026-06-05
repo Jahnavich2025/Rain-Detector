@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Rain Detector — LTspice Companion</title>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&family=Source+Serif+4:wght@300;400;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --sky-dry:   #c8e6f0;
+  --sky-wet:   #2a3d54;
+  --paper:     #f4efe6;
+  --ink:       #1a1a2e;
+  --rain-blue: #4a9eca;
+  --rain-dark: #1e4d6b;
+  --led-off:   #c4a882;
+  --led-on:    #ff4444;
+  --wire:      #2c4a6e;
+  --comp-fill: #e8ddd0;
+  --green-hi:  #2d8a4e;
+  --amber:     #d4870a;
+  --border:    #b8a898;
+  --wet-bg:    #0f1f30;
+  --cur-color: #d4870a;
+  --muted:     #7a6a5a;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
+
+body {
+  font-family: 'Source Serif 4', serif;
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100vh;
+  transition: background .8s, color .8s;
+}
+body.wet {
+  background: var(--wet-bg);
+  color: #c8dde8;
+}
+
+/* Rain animation */
+.rain-layer {
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  overflow:hidden; opacity:0; transition:opacity .5s;
+}
+body.wet .rain-layer { opacity:1; }
+.raindrop {
+  position:absolute; width:1.5px; border-radius:1px;
+  background: linear-gradient(#4a9eca88, #4a9eca00);
+  animation: fall linear infinite;
+}
+@keyframes fall {
+  from { transform: translateY(-40px); opacity:.8; }
+  to   { transform: translateY(110vh);  opacity:0; }
+}
+
+header {
+  padding: 20px 32px 14px;
+  border-bottom: 2px solid var(--border);
+  display: flex; align-items: flex-end; gap: 16px;
+  position: relative; z-index:2;
+  transition: border-color .5s;
+}
+body.wet header { border-color: #2a5070; }
+
+.hdr-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2.2rem; letter-spacing: 4px;
+  color: var(--rain-dark); line-height: 1;
+  transition: color .5s;
+}
+body.wet .hdr-title { color: #7ec8e8; }
+
+.hdr-sub {
+  font-family: 'Courier Prime', monospace;
+  font-size: .72rem; color: var(--muted); letter-spacing: 1.5px;
+}
+body.wet .hdr-sub { color: #4a7a9b; }
+
+.status-pill {
+  margin-left: auto;
+  font-family: 'Courier Prime', monospace;
+  font-size: .75rem; font-weight:700; letter-spacing:2px;
+  padding: 5px 16px; border-radius:20px;
+  border: 2px solid var(--led-off); color: var(--muted);
+  background: transparent; transition: all .4s;
+}
+.status-pill.active {
+  border-color: var(--led-on); color: var(--led-on);
+  background: #ff444422;
+  box-shadow: 0 0 12px #ff444455, 0 0 30px #ff444422;
+  animation: pulse-pill 1s ease infinite;
+}
+@keyframes pulse-pill { 0%,100%{box-shadow:0 0 10px #ff444455} 50%{box-shadow:0 0 22px #ff4444aa} }
+
+/* ── LAYOUT ── */
+.page {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 0;
+  min-height: calc(100vh - 68px);
+  position: relative; z-index:1;
+}
+
+/* ── CIRCUIT PANEL ── */
+.circuit-panel {
+  padding: 24px;
+  display: flex; flex-direction:column; gap:18px;
+}
+
+.section-label {
+  font-family: 'Courier Prime', monospace;
+  font-size: .65rem; letter-spacing:3px; text-transform:uppercase;
+  color: var(--muted); margin-bottom: 6px;
+}
+body.wet .section-label { color: #4a7a9b; }
+
+.circuit-wrap {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 2px 3px 0 var(--border);
+  transition: all .5s;
+}
+body.wet .circuit-wrap {
+  background: #0a1824;
+  border-color: #2a5070;
+  box-shadow: 2px 3px 0 #1a3a50;
+}
+
+#circuit-svg { width:100%; display:block; }
+
+/* current arrows */
+.cur-arrow {
+  transition: opacity .4s;
+}
+.cur-label {
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  transition: fill .4s;
+}
+
+/* ── CONTROLS ── */
+.controls-card {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 18px;
+  box-shadow: 2px 3px 0 var(--border);
+  transition: all .5s;
+}
+body.wet .controls-card {
+  background: #0a1824;
+  border-color: #2a5070;
+  box-shadow: 2px 3px 0 #1a3a50;
+}
+
+.ctrl-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1rem; letter-spacing:3px; color: var(--rain-dark);
+  margin-bottom: 14px;
+  transition: color .5s;
+}
+body.wet .ctrl-title { color: #7ec8e8; }
+
+.slider-group { margin-bottom: 16px; }
+.slider-label {
+  font-family: 'Courier Prime', monospace;
+  font-size: .72rem; color: var(--muted);
+  display:flex; justify-content:space-between; margin-bottom:5px;
+}
+body.wet .slider-label { color: #4a7a9b; }
+.slider-label strong { color: var(--amber); font-weight:700; }
+
+input[type=range] {
+  -webkit-appearance:none; appearance:none;
+  width:100%; height:3px;
+  background: var(--border); border-radius:2px; cursor:pointer; outline:none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:15px; height:15px;
+  background: var(--rain-dark); border-radius:50%; cursor:pointer;
+  border: 2px solid var(--paper);
+  box-shadow: 0 1px 4px #0004;
+  transition: background .3s;
+}
+body.wet input[type=range]::-webkit-slider-thumb { background: #4a9eca; }
+
+/* ── CURRENT TABLE ── */
+.cur-table {
+  width:100%; border-collapse:collapse;
+  font-family:'Courier Prime', monospace; font-size:.78rem;
+  margin-top: 4px;
+}
+.cur-table th {
+  text-align:left; font-size:.6rem; letter-spacing:2px;
+  color: var(--muted); padding: 4px 6px; font-weight:400;
+  border-bottom: 1px solid var(--border);
+}
+.cur-table td {
+  padding: 5px 6px;
+  border-bottom: 1px dotted var(--border);
+  color: var(--ink); transition:color .3s;
+  vertical-align: middle;
+}
+body.wet .cur-table td { color: #c8dde8; }
+body.wet .cur-table th { color: #4a7a9b; border-color: #2a5070; }
+body.wet .cur-table td { border-color: #2a5070; }
+
+.cur-val {
+  font-weight: 700; color: var(--amber);
+  min-width: 70px; display:inline-block;
+}
+.cur-bar {
+  display:inline-block; height:7px; border-radius:2px;
+  background: var(--rain-blue); vertical-align:middle;
+  transition: width .5s ease, background .4s;
+  min-width:2px;
+}
+.cur-bar.active { background: var(--led-on); }
+
+.led-indicator {
+  width: 18px; height: 18px; border-radius:50%;
+  display:inline-block; vertical-align:middle;
+  border: 2px solid var(--led-off);
+  background: transparent;
+  transition: all .4s;
+}
+.led-indicator.on {
+  background: var(--led-on);
+  border-color: var(--led-on);
+  box-shadow: 0 0 10px var(--led-on), 0 0 22px #ff444466;
+}
+
+/* ── SIDE PANEL ── */
+.side-panel {
+  border-left: 1.5px solid var(--border);
+  display: flex; flex-direction:column;
+  transition: border-color .5s;
+}
+body.wet .side-panel { border-color: #2a5070; }
+
+.side-section {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  transition: border-color .5s;
+}
+body.wet .side-section { border-color: #2a5070; }
+
+.ltspice-block {
+  font-family: 'Courier Prime', monospace;
+  font-size: .68rem; line-height: 1.85;
+  background: #f0ebe2;
+  border: 1px solid var(--border);
+  border-radius:3px; padding:12px 14px;
+  color: #2c4a6e;
+  transition: all .5s;
+  white-space: pre;
+  overflow-x: auto;
+}
+body.wet .ltspice-block {
+  background: #0a1824; color: #7ec8e8; border-color: #2a5070;
+}
+
+.kw  { color: #8b0000; }
+body.wet .kw { color: #ff9966; }
+.val { color: #006400; font-weight:700; }
+body.wet .val { color: #39ff14; }
+.cmt { color: #7a7a7a; font-style:italic; }
+body.wet .cmt { color: #4a7a9b; }
+
+.phase-card {
+  border-radius: 4px; padding: 10px 12px; margin-bottom: 8px;
+  font-family: 'Courier Prime', monospace; font-size:.7rem;
+  line-height: 1.7; border: 1px solid;
+}
+.phase-reset { border-color: #b8d4a8; background: #f0f8ec; color: #2d5a1a; }
+.phase-eval  { border-color: #a8c8e8; background: #ecf4fc; color: #1a3a5a; }
+body.wet .phase-reset { border-color: #2a5a2a; background:#0a1a0a; color:#7adf7a; }
+body.wet .phase-eval  { border-color: #1a4a7a; background:#050d18; color:#7ec8e8; }
+
+.phase-title { font-weight:700; letter-spacing:1px; font-size:.75rem; }
+</style>
+</head>
+<body>
+
+<!-- Rain animation layer -->
+<div class="rain-layer" id="rain-layer"></div>
+
+<header>
+  <div>
+    <div class="hdr-title">RAIN DETECTOR</div>
+    <div class="hdr-sub">LTspice XVII · Current Analysis Companion</div>
+  </div>
+  <div class="status-pill" id="status-pill">● DRY</div>
+</header>
+
+<div class="page">
+
+  <!-- CIRCUIT -->
+  <div class="circuit-panel">
+    <div>
+      <div class="section-label">Schematic — rain_detector.asc</div>
+      <div class="circuit-wrap">
+        <svg id="circuit-svg" viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arr" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 Z" fill="#d4870a"/>
+            </marker>
+            <marker id="arr-blue" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 Z" fill="#4a9eca"/>
+            </marker>
+            <marker id="arr-red" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 Z" fill="#e04444"/>
+            </marker>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- BG -->
+          <rect width="720" height="360" fill="transparent"/>
+
+          <!-- ═══ VCC Rail ═══ -->
+          <line x1="60" y1="30" x2="660" y2="30" stroke="#cc2244" stroke-width="2.5"/>
+          <text x="20" y="35" font-family="Courier Prime,monospace" font-size="11" fill="#cc2244" font-weight="700">VCC</text>
+          <text x="660" y="35" font-family="Courier Prime,monospace" font-size="10" fill="#cc2244">5V</text>
+
+          <!-- ═══ GND Rail ═══ -->
+          <line x1="60" y1="330" x2="660" y2="330" stroke="#445566" stroke-width="2"/>
+          <text x="20" y="334" font-family="Courier Prime,monospace" font-size="11" fill="#445566">GND</text>
+
+          <!-- ══ R1 Pull-up ══ -->
+          <line x1="120" y1="30" x2="120" y2="68" stroke="#2c4a6e" stroke-width="2" id="w-r1-top"/>
+          <rect x="108" y="68" width="24" height="56" rx="3" fill="#f5f0e8" stroke="#2c4a6e" stroke-width="1.8" id="r1-body"/>
+          <text x="136" y="98" font-family="Courier Prime,monospace" font-size="10" fill="#2c4a6e" font-weight="700">R1</text>
+          <text x="136" y="110" font-family="Courier Prime,monospace" font-size="9" fill="#7a6a5a">10kΩ</text>
+          <line x1="120" y1="124" x2="120" y2="170" stroke="#2c4a6e" stroke-width="2" id="w-r1-bot"/>
+
+          <!-- ══ NODE_A (junction) ══ -->
+          <circle id="node-a" cx="120" cy="170" r="5" fill="#2c4a6e"/>
+          <text x="128" y="167" font-family="Courier Prime,monospace" font-size="9" fill="#7a6a5a">NODE_A</text>
+
+          <!-- ══ R_rain (sensor) ══ -->
+          <line x1="120" y1="175" x2="120" y2="215" stroke="#2c4a6e" stroke-width="2" id="w-rain-top"/>
+          <!-- rain sensor symbol: zigzag -->
+          <polyline id="r-rain-body" points="120,215 108,225 132,235 108,245 132,255 108,265 120,275"
+            fill="none" stroke="#2c4a6e" stroke-width="2" stroke-linecap="round"/>
+          <text x="136" y="248" font-family="Courier Prime,monospace" font-size="10" fill="#4a9eca" font-weight="700">R_rain</text>
+          <text id="r-rain-val" x="136" y="260" font-family="Courier Prime,monospace" font-size="9" fill="#7a6a5a">10 MΩ</text>
+          <line x1="120" y1="275" x2="120" y2="330" stroke="#2c4a6e" stroke-width="2" id="w-rain-bot"/>
+
+          <!-- ══ Wire from NODE_A to Comp (+) ══ -->
+          <line x1="120" y1="170" x2="290" y2="170" stroke="#2c4a6e" stroke-width="1.8" id="w-inp"/>
+          <line x1="290" y1="170" x2="290" y2="188" stroke="#2c4a6e" stroke-width="1.8"/>
+
+          <!-- ══ Threshold divider ══ -->
+          <!-- R_thresh top -->
+          <line x1="290" y1="30" x2="290" y2="68" stroke="#2c4a6e" stroke-width="1.8"/>
+          <rect x="278" y="68" width="24" height="50" rx="3" fill="#f5f0e8" stroke="#2c4a6e" stroke-width="1.5"/>
+          <text x="307" y="94" font-family="Courier Prime,monospace" font-size="9" fill="#2c4a6e">R_thresh</text>
+          <text x="307" y="105" font-family="Courier Prime,monospace" font-size="8" fill="#7a6a5a">10kΩ</text>
+          <!-- midpoint node (THRESH) -->
+          <line x1="290" y1="118" x2="290" y2="145" stroke="#2c4a6e" stroke-width="1.8"/>
+          <circle cx="290" cy="145" r="4" fill="#7a6a5a" id="node-thresh"/>
+          <text x="265" y="142" font-family="Courier Prime,monospace" font-size="8" fill="#7a6a5a">THRESH</text>
+          <!-- R_thresh2 lower -->
+          <line x1="290" y1="149" x2="290" y2="170" stroke="#2c4a6e" stroke-width="1.8"/>
+          <rect x="278" y="170" width="24" height="50" rx="3" fill="#f5f0e8" stroke="#2c4a6e" stroke-width="1.5"/>
+          <text x="307" y="197" font-family="Courier Prime,monospace" font-size="9" fill="#2c4a6e">R_thresh2</text>
+          <text x="307" y="208" font-family="Courier Prime,monospace" font-size="8" fill="#7a6a5a">10kΩ</text>
+          <line x1="290" y1="220" x2="290" y2="330" stroke="#2c4a6e" stroke-width="1.8"/>
+          <!-- wire THRESH to comp(-) -->
+          <line x1="290" y1="145" x2="370" y2="145" stroke="#2c4a6e" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <line x1="370" y1="145" x2="370" y2="200" stroke="#2c4a6e" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+          <!-- ══ LM393 Comparator ══ -->
+          <!-- triangle body -->
+          <polygon id="comp-body" points="360,180 360,260 440,220"
+            fill="#e8ddd0" stroke="#2c4a6e" stroke-width="2"/>
+          <text x="368" y="216" font-family="Courier Prime,monospace" font-size="9" fill="#2c4a6e">+</text>
+          <text x="368" y="248" font-family="Courier Prime,monospace" font-size="9" fill="#2c4a6e">−</text>
+          <text x="390" y="228" font-family="Courier Prime,monospace" font-size="8" fill="#7a6a5a">LM393</text>
+          <!-- open-collector output bubble -->
+          <circle id="oc-bubble" cx="447" cy="220" r="5" fill="#f5f0e8" stroke="#2c4a6e" stroke-width="1.5"/>
+          <!-- output wire -->
+          <line x1="452" y1="220" x2="510" y2="220" stroke="#2c4a6e" stroke-width="2" id="w-comp-out"/>
+          <!-- comp vcc/gnd (tiny) -->
+          <line x1="400" y1="180" x2="400" y2="30" stroke="#cc2244" stroke-width="1" stroke-dasharray="3,3"/>
+          <line x1="400" y1="260" x2="400" y2="330" stroke="#445566" stroke-width="1" stroke-dasharray="3,3"/>
+
+          <!-- ══ R_pull ══ -->
+          <line x1="510" y1="30" x2="510" y2="168" stroke="#2c4a6e" stroke-width="2" id="w-rpull-top"/>
+          <rect x="498" y="168" width="24" height="50" rx="3" fill="#f5f0e8" stroke="#2c4a6e" stroke-width="1.8" id="rpull-body"/>
+          <text x="526" y="194" font-family="Courier Prime,monospace" font-size="10" fill="#2c4a6e" font-weight="700">R_pull</text>
+          <text x="526" y="205" font-family="Courier Prime,monospace" font-size="8" fill="#7a6a5a">10kΩ</text>
+          <line x1="510" y1="218" x2="510" y2="220" stroke="#2c4a6e" stroke-width="2"/>
+
+          <!-- ══ R_LED ══ -->
+          <line x1="510" y1="220" x2="560" y2="220" stroke="#2c4a6e" stroke-width="2" id="w-rled-in"/>
+          <rect x="560" y="208" width="50" height="24" rx="3" fill="#f5f0e8" stroke="#2c4a6e" stroke-width="1.8" id="rled-body"/>
+          <text x="570" y="224" font-family="Courier Prime,monospace" font-size="9" fill="#2c4a6e" font-weight="700">R_LED</text>
+          <text x="568" y="238" font-family="Courier Prime,monospace" font-size="8" fill="#7a6a5a">470Ω</text>
+          <line x1="610" y1="220" x2="630" y2="220" stroke="#2c4a6e" stroke-width="2" id="w-rled-out"/>
+
+          <!-- ══ LED (D1) ══ -->
+          <!-- diode triangle -->
+          <polygon id="led-body" points="630,208 630,232 655,220"
+            fill="#c4a882" stroke="#2c4a6e" stroke-width="1.8" id="led-tri"/>
+          <line x1="655" y1="208" x2="655" y2="232" stroke="#2c4a6e" stroke-width="2.5" id="led-bar"/>
+          <text x="630" y="246" font-family="Courier Prime,monospace" font-size="9" fill="#7a6a5a">D1 (LED)</text>
+          <line x1="655" y1="220" x2="680" y2="220" stroke="#2c4a6e" stroke-width="2"/>
+          <line x1="680" y1="220" x2="680" y2="330" stroke="#2c4a6e" stroke-width="2"/>
+
+          <!-- ══ CURRENT ARROWS ══ -->
+          <!-- I_sensor: down through R1 + R_rain -->
+          <line id="arr-sensor" x1="100" y1="90" x2="100" y2="130" stroke="#d4870a" stroke-width="2"
+            marker-end="url(#arr)" opacity="0.15"/>
+          <text id="lbl-sensor" class="cur-label" x="58" y="115" fill="#d4870a" font-family="Courier Prime,monospace" font-size="9" opacity="0.15">I_sens</text>
+
+          <!-- I_pullup: down through R_pull -->
+          <line id="arr-pullup" x1="530" y1="60" x2="530" y2="110" stroke="#4a9eca" stroke-width="2"
+            marker-end="url(#arr-blue)" opacity="0.15"/>
+          <text id="lbl-pullup" class="cur-label" x="534" y="90" fill="#4a9eca" font-family="Courier Prime,monospace" font-size="9" opacity="0.15">I_pull</text>
+
+          <!-- I_LED: right through R_LED → LED -->
+          <line id="arr-led" x1="565" y1="204" x2="605" y2="204" stroke="#e04444" stroke-width="2"
+            marker-end="url(#arr-red)" opacity="0.15"/>
+          <text id="lbl-led" class="cur-label" x="570" y="200" fill="#e04444" font-family="Courier Prime,monospace" font-size="9" opacity="0.15">I_LED</text>
+
+          <!-- V labels on key nodes -->
+          <text id="lbl-vnode" x="60" y="165" font-family="Courier Prime,monospace" font-size="9" fill="#2d8a4e">V_A=5.00V</text>
+          <text id="lbl-vthresh" x="230" y="142" font-family="Courier Prime,monospace" font-size="9" fill="#2d8a4e">V_T=2.50V</text>
+
+        </svg>
+      </div>
+    </div>
+
+    <!-- CURRENT TABLE -->
+    <div class="controls-card">
+      <div class="ctrl-title">Live Current Monitor</div>
+      <table class="cur-table">
+        <thead>
+          <tr>
+            <th>PROBE</th>
+            <th>COMPONENT</th>
+            <th>VALUE</th>
+            <th>FLOW BAR</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>I(R1)</code></td>
+            <td>Sensor branch</td>
+            <td><span class="cur-val" id="cv-sensor">0.00 µA</span></td>
+            <td><span class="cur-bar" id="cb-sensor" style="width:2px"></span></td>
+          </tr>
+          <tr>
+            <td><code>I(R_pull)</code></td>
+            <td>Pull-up</td>
+            <td><span class="cur-val" id="cv-pull">0.00 µA</span></td>
+            <td><span class="cur-bar" id="cb-pull" style="width:2px"></span></td>
+          </tr>
+          <tr>
+            <td><code>I(R_LED)</code></td>
+            <td>LED current</td>
+            <td><span class="cur-val" id="cv-led">0.00 mA</span></td>
+            <td><span class="cur-bar active" id="cb-led" style="width:2px"></span></td>
+          </tr>
+          <tr>
+            <td><code>I(V1)</code></td>
+            <td>Total supply</td>
+            <td><span class="cur-val" id="cv-total">0.50 mA</span></td>
+            <td><span class="cur-bar" id="cb-total" style="width:2px"></span></td>
+          </tr>
+          <tr>
+            <td><code>V(NODE_A)</code></td>
+            <td>Sensor node</td>
+            <td><span class="cur-val" id="cv-vnode">5.00 V</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><code>V(THRESH)</code></td>
+            <td>Threshold ref</td>
+            <td><span class="cur-val" id="cv-vthresh">2.50 V</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td colspan="2">LED Status</td>
+            <td colspan="2"><span class="led-indicator" id="led-dot"></span> <span id="led-state" style="font-family:Courier Prime,monospace; font-size:.75rem; color:var(--muted)">OFF (Dry)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SLIDER CONTROL -->
+    <div class="controls-card">
+      <div class="ctrl-title">Sensor Resistance Control</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          R_rain (Sensor) <strong id="r-label">10 MΩ — Dry</strong>
+        </div>
+        <input type="range" id="r-slider" min="0" max="7" step="1" value="0"/>
+        <div style="display:flex; justify-content:space-between; font-family:'Courier Prime',monospace; font-size:.6rem; color:var(--muted); margin-top:3px;">
+          <span>DRY</span><span>HUMID</span><span>DRIZZLE</span><span>RAIN</span><span>HEAVY</span><span>FLOOD</span><span>SUBMERGED</span><span>SHORT</span>
+        </div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">VCC <strong id="vcc-label">5.00 V</strong></div>
+        <input type="range" id="vcc-slider" min="300" max="550" step="10" value="500"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div class="side-panel">
+
+    <div class="side-section">
+      <div class="section-label">LTspice Analysis Commands</div>
+      <div class="ltspice-block" id="spice-block"><span class="cmt">; Paste into LTspice XVII</span>
+<span class="cmt">; rain_detector.asc</span>
+
+<span class="kw">.param</span> R_sensor <span class="val">10MEG</span>
+
+<span class="kw">.step param</span> R_sensor <span class="kw">list</span>
+  <span class="val">10MEG</span> <span class="cmt">; Dry</span>
+  <span class="val">100k</span>  <span class="cmt">; Humid</span>
+  <span class="val">10k</span>   <span class="cmt">; Light rain</span>
+  <span class="val">5k</span>    <span class="cmt">; Rain</span>
+  <span class="val">500</span>   <span class="cmt">; Submerged</span>
+
+<span class="kw">.op</span>
+
+<span class="cmt">; Current probes:</span>
+<span class="kw">.meas DC</span> I_SENSOR
+  + find <span class="val">I(R1)</span>
+<span class="kw">.meas DC</span> I_LED
+  + find <span class="val">I(R_LED)</span>
+<span class="kw">.meas DC</span> I_PULL
+  + find <span class="val">I(R_pull)</span>
+<span class="kw">.meas DC</span> I_TOTAL
+  + find <span class="val">I(V1)</span></div>
+    </div>
+
+    <div class="side-section">
+      <div class="section-label">Operating Phases</div>
+      <div class="phase-card phase-reset" id="card-dry">
+        <div class="phase-title">◉ DRY CONDITION</div>
+        R_rain >> R1<br>
+        V_NODE_A ≈ VCC = 5V<br>
+        V_A > V_THRESH → Output HIGH<br>
+        LED: <strong>OFF</strong> | I_LED = 0 mA
+      </div>
+      <div class="phase-card phase-eval" id="card-wet">
+        <div class="phase-title">◉ WET CONDITION</div>
+        R_rain ≈ R1 or lower<br>
+        V_NODE_A drops below 2.5V<br>
+        V_A &lt; V_THRESH → Output LOW<br>
+        LED: <strong>ON</strong> | I_LED ≈ 6 mA
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="section-label">Expected Currents (VCC=5V)</div>
+      <div style="font-family:'Courier Prime',monospace; font-size:.7rem; line-height:2;">
+        <div style="color:var(--muted)">— DRY (R_rain=10MΩ) —</div>
+        <div>I(R1)    ≈ <strong style="color:var(--amber)">0–5 µA</strong></div>
+        <div>I(R_pull)≈ <strong style="color:var(--amber)">490 µA</strong></div>
+        <div>I(R_LED) = <strong style="color:var(--amber)">0 mA</strong></div>
+        <div>I(V1)    ≈ <strong style="color:var(--amber)">0.5 mA</strong></div>
+        <div style="color:var(--muted); margin-top:6px">— WET (R_rain=5kΩ) —</div>
+        <div>I(R1)    ≈ <strong style="color:var(--led-on)">250 µA</strong></div>
+        <div>I(R_pull)≈ <strong style="color:var(--led-on)">490 µA</strong></div>
+        <div>I(R_LED) ≈ <strong style="color:var(--led-on)">6.3 mA</strong></div>
+        <div>I(V1)    ≈ <strong style="color:var(--led-on)">7.3 mA</strong></div>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="section-label">Sensitivity Formula</div>
+      <div style="font-family:'Courier Prime',monospace; font-size:.7rem; line-height:1.9; color:var(--muted)">
+        V_NODE_A = VCC × R_rain<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;÷ (R1 + R_rain)<br><br>
+        Trigger when:<br>
+        V_NODE_A &lt; V_THRESH<br><br>
+        I_LED = (VCC − Vf − V_OL)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;÷ R_LED<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ≈ (5−2−0.05)÷470<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ≈ <strong style="color:var(--led-on)">6.3 mA</strong>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// R_rain steps: [ohms, label]
+const R_STEPS = [
+  [10e6,  '10 MΩ — Dry'],
+  [1e6,   '1 MΩ  — Humid air'],
+  [100e3, '100 kΩ — Condensation'],
+  [10e3,  '10 kΩ  — Drizzle'],
+  [5e3,   '5 kΩ   — Rain'],
+  [1e3,   '1 kΩ   — Heavy rain'],
+  [500,   '500 Ω  — Flooded'],
+  [50,    '50 Ω   — Submerged'],
+];
+
+const VF_LED = 2.0;   // LED forward voltage
+const V_OL   = 0.05;  // comparator output low saturation
+const R1     = 10e3;
+const R_PULL = 10e3;
+const R_LED_VAL = 470;
+const V_THRESH = 2.5; // fixed by divider
+
+function compute(R_rain, VCC) {
+  // Sensor node voltage (voltage divider)
+  const V_A = VCC * R_rain / (R1 + R_rain);
+
+  // Sensor current
+  const I_sensor = (VCC - V_A) / R1; // = V_A / R_rain
+
+  // Is it wet?
+  const wet = V_A < V_THRESH;
+
+  let I_led = 0, I_pull = 0;
+  if (wet) {
+    // Comparator output pulled LOW → current flows through R_pull + R_LED + LED
+    I_pull = (VCC - V_OL) / R_PULL;
+    I_led  = Math.max(0, (VCC - VF_LED - V_OL) / R_LED_VAL);
+  } else {
+    // Output floating HIGH → R_pull carries only leakage
+    I_pull = 0.0005; // ~0.5mA quiescent (threshold divider)
+    I_led  = 0;
+  }
+
+  const I_total = I_sensor + I_pull + I_led + (VCC / (10e3 + 10e3)); // divider quiescent
+
+  return { V_A, I_sensor, I_pull, I_led, I_total, wet };
+}
+
+function fmt(v, unit) {
+  if (unit === 'µA') return (v*1e6).toFixed(1) + ' µA';
+  if (unit === 'mA') return (v*1e3).toFixed(2) + ' mA';
+  if (unit === 'V')  return v.toFixed(3) + ' V';
+  return v.toFixed(3);
+}
+
+function barW(v, max, px=120) {
+  return Math.max(2, Math.min(px, (v/max)*px));
+}
+
+function update() {
+  const step = +document.getElementById('r-slider').value;
+  const [R_rain, label] = R_STEPS[step];
+  const VCC = +document.getElementById('vcc-slider').value / 100;
+
+  document.getElementById('r-label').textContent = label;
+  document.getElementById('vcc-label').textContent = VCC.toFixed(2) + ' V';
+  document.getElementById('r-rain-val').textContent = label.split(' — ')[0];
+
+  const { V_A, I_sensor, I_pull, I_led, I_total, wet } = compute(R_rain, VCC);
+
+  // Current table
+  document.getElementById('cv-sensor').textContent = fmt(I_sensor,'µA');
+  document.getElementById('cv-pull').textContent   = fmt(I_pull,  'mA');
+  document.getElementById('cv-led').textContent    = fmt(I_led,   'mA');
+  document.getElementById('cv-total').textContent  = fmt(I_total, 'mA');
+  document.getElementById('cv-vnode').textContent  = fmt(V_A, 'V');
+  document.getElementById('cv-vthresh').textContent= fmt(2.5, 'V');
+
+  // Flow bars
+  document.getElementById('cb-sensor').style.width = barW(I_sensor, 500e-6) + 'px';
+  document.getElementById('cb-pull').style.width   = barW(I_pull,   5e-3)   + 'px';
+  document.getElementById('cb-led').style.width    = barW(I_led,    10e-3)  + 'px';
+  document.getElementById('cb-total').style.width  = barW(I_total,  10e-3)  + 'px';
+
+  // Arrow opacity
+  const ao = wet ? 1.0 : 0.2;
+  document.getElementById('arr-sensor').style.opacity = (I_sensor > 50e-6 ? 0.9 : 0.2);
+  document.getElementById('lbl-sensor').style.opacity = (I_sensor > 50e-6 ? 0.9 : 0.2);
+  document.getElementById('arr-pullup').style.opacity = wet ? 0.9 : 0.3;
+  document.getElementById('lbl-pullup').style.opacity = wet ? 0.9 : 0.3;
+  document.getElementById('arr-led').style.opacity    = wet ? 1.0 : 0.15;
+  document.getElementById('lbl-led').style.opacity    = wet ? 1.0 : 0.15;
+
+  // LED glow
+  const ledTri = document.getElementById('led-tri');
+  const ledDot = document.getElementById('led-dot');
+  const pill   = document.getElementById('status-pill');
+  const state  = document.getElementById('led-state');
+  if (wet) {
+    ledTri.setAttribute('fill', '#ff4444');
+    ledTri.setAttribute('filter', 'url(#glow)');
+    ledDot.classList.add('on');
+    pill.textContent = '● RAIN DETECTED';
+    pill.classList.add('active');
+    state.textContent = 'ON — Rain Detected';
+    state.style.color = '#ff4444';
+  } else {
+    ledTri.setAttribute('fill', '#c4a882');
+    ledTri.removeAttribute('filter');
+    ledDot.classList.remove('on');
+    pill.textContent = '● DRY';
+    pill.classList.remove('active');
+    state.textContent = 'OFF (Dry)';
+    state.style.color = '';
+  }
+
+  // Body class
+  document.body.classList.toggle('wet', wet);
+
+  // Node voltage labels
+  document.getElementById('lbl-vnode').textContent  = 'V_A=' + V_A.toFixed(2) + 'V';
+
+  // Rain particles
+  updateRain(wet, R_rain);
+}
+
+// Rain particles
+let rainInterval = null;
+function updateRain(wet, R_rain) {
+  const layer = document.getElementById('rain-layer');
+  if (!wet) { layer.innerHTML=''; return; }
+  const intensity = Math.max(5, Math.min(60, Math.round(60 * (10e3 / R_rain))));
+  while (layer.children.length < intensity) {
+    const d = document.createElement('div');
+    d.className = 'raindrop';
+    d.style.left = Math.random()*100 + 'vw';
+    const h = 18 + Math.random()*40;
+    d.style.height = h + 'px';
+    d.style.animationDuration = (.4 + Math.random()*.8) + 's';
+    d.style.animationDelay = (-Math.random()) + 's';
+    d.style.opacity = .4 + Math.random()*.5;
+    layer.appendChild(d);
+  }
+  while (layer.children.length > intensity) {
+    layer.removeChild(layer.lastChild);
+  }
+}
+
+document.getElementById('r-slider').addEventListener('input', update);
+document.getElementById('vcc-slider').addEventListener('input', update);
+
+update();
+</script>
+</body>
+</html>
